@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / compiled files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+*.egg-info/
+.pytest_cache/
+migrations/
+
+# Environment variables
+.env*
+
+# Django-specific files
+*.log
+*.sqlite3
+media/
+static/
+local_settings.py  # Or any other local settings file not meant for production
+db.sqlite3
+
+# Virtual environment
+venv/
+env/
+.env
+
+# IDE-specific files
+.idea/  # PyCharm
+.vscode/  # VS Code
+*.sublime-project
+*.sublime-workspace
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Other common exclusions
+dist/
+build/
+*.egg
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+
+# Celery beat schedule file
+celerybeat-schedule
+
+# Node.js (if frontend is integrated)
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
