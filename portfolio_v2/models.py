@@ -84,4 +84,12 @@ class SocialUser(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = 'email'
     EMAIL_FIELD = 'email'
     REQUIRED_FIELDS = ['name',]
-    
+
+
+class UserMessageContents(models.Model):
+    manual_user = models.ForeignKey(ManualUser, on_delete=models.CASCADE, related_name='manual_user_messages', blank=True, null=True)
+    social_user = models.ForeignKey(SocialUser, on_delete=models.CASCADE, related_name='social_user_messages', blank=True, null=True)
+    purpose = models.CharField(max_length=255, null=True, blank=True)
+    message = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
