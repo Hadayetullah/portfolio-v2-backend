@@ -27,6 +27,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+AUTH_USER_MODEL = 'portfolio_v2.CustomUser'
+
 # CORS settings
 CORS_ORIGIN_WHITELIST = (
     'localhost:8000',
