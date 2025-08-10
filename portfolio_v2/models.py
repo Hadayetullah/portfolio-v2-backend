@@ -1,6 +1,9 @@
 from django.utils import timezone
 from datetime import timedelta
+
 from django.db import models
+from django.db import IntegrityError, transaction
+
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 
 # Create your models here.
@@ -91,6 +94,29 @@ class UserAuthProvider(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.provider}"
+    
+    def has_provider(self, provider):
+        return self.auth_providers.filter(provider=provider).exists()
+
+    def add_provider(self, provider, uid=None, extra_data=None):
+        """
+        Create or update a UserAuthProvider row; returns (obj, created).
+        Uses get_or_create inside a transaction to avoid duplicates.
+        """
+        try:
+            with transaction.atomic():
+                obj, created = self.auth_providers.get_or_create(
+                    provider=provider,
+                    defaults={'uid': uid, 'extra_data': extra_data}
+                )
+                # If provider existed but uid/extra_data changed, update it
+                if not created and uid and obj.uid != uid:
+                    obj.uid = uid
+                    obj.extra_data = extra_data
+                    obj.save(update_fields=['uid', 'extra_data'])
+                return obj, created
+        except IntegrityError:
+            raise
 
 
 
