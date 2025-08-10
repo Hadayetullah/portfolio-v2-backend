@@ -43,7 +43,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
-    date_joined = models.DateTimeField(auto_now_add=True)
+    created = models.DateTimeField(auto_now_add=True)
 
     # OTP fields (for manual signup only)
     otp = models.CharField(max_length=6, null=True, blank=True)
@@ -54,24 +54,14 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
-    # Auth provider info
-    AUTH_PROVIDERS = [
-        ('manual', 'Manual Signup'),
-        ('google', 'Google'),
-        ('facebook', 'Facebook'),
-        ('github', 'GitHub'),
-    ]
-    auth_provider = models.CharField(
-        max_length=20,
-        choices=AUTH_PROVIDERS,
-        default='manual'
-    )
-
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
     EMAIL_FIELD = 'email'
     REQUIRED_FIELDS = ['name']
+
+    class Meta:
+        ordering = ['created']
 
     def otp_is_valid(self):
         """Check if OTP exists and is still valid."""
@@ -81,14 +71,37 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+    
+
+class UserAuthProvider(models.Model):
+    PROVIDERS = [
+        ('manual', 'manual'),
+        ('google', 'google'),
+        ('facebook', 'facebook'),
+        ('github', 'github'),
+    ]
+
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="auth_providers")
+    provider = models.CharField(max_length=20, choices=PROVIDERS)
+    uid = models.CharField(max_length=255, blank=True, null=True)  # Social provider user ID
+    extra_data = models.JSONField(blank=True, null=True)  # store profile data from social login
+
+    class Meta:
+        unique_together = ('user', 'provider')  # No duplicate provider for same user
+
+    def __str__(self):
+        return f"{self.user.email} - {self.provider}"
 
 
 
 class UserMessageContents(models.Model):
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='user_messages', blank=True, null=True)
+    user = models.ForeignKey(UserAuthProvider, on_delete=models.CASCADE, related_name='user_messages', blank=True, null=True)
     purpose = models.CharField(max_length=255, null=True, blank=True)
     message = models.TextField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp']
 
     def __str__(self):
         return self.purpose
