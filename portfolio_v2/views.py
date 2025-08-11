@@ -1,7 +1,9 @@
 import json
+import random
 from django.contrib.auth import get_user_model
 from django.views import View
 from django.http import JsonResponse
+from django.utils import timezone
 from django.db import transaction, IntegrityError
 
 from .models import UserAuthProvider, UserMessageContents
@@ -58,8 +60,15 @@ class ManualSignupView(View):
                     
                     except IntegrityError:
                         return JsonResponse({"error": "Could not save message"}, status=500)
-                else:
-                    pass # send otp email
+                    
+                elif user and (not user.is_verified or not user.is_active):
+                    otp_code = f"{random.randint(100000, 999999)}"
+                    user.otp = otp_code
+                    user.otp_created_at = timezone.now()
+                    user.save(update_fields=['otp', 'otp_created_at'])
+                    user.add_provider(provider)
+                    # TODO: Send OTP email
+                    return JsonResponse({"success": "OTP sent to existing user"}, status=200)
         
         except IntegrityError as e:
             return JsonResponse({"error": f"Database error: {str(e)}"}, status=500)
