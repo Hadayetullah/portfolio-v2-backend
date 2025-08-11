@@ -55,7 +55,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # Status flags
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
 
     objects = CustomUserManager()
 
@@ -74,26 +74,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
-    
-
-class UserAuthProvider(models.Model):
-    PROVIDERS = [
-        ('manual', 'manual'),
-        ('google', 'google'),
-        ('facebook', 'facebook'),
-        ('github', 'github'),
-    ]
-
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="auth_providers")
-    provider = models.CharField(max_length=20, choices=PROVIDERS)
-    uid = models.CharField(max_length=255, blank=True, null=True)  # Social provider user ID
-    extra_data = models.JSONField(blank=True, null=True)  # store profile data from social login
-
-    class Meta:
-        unique_together = ('user', 'provider')  # No duplicate provider for same user
-
-    def __str__(self):
-        return f"{self.user.email} - {self.provider}"
     
     def has_provider(self, provider):
         return self.auth_providers.filter(provider=provider).exists()
@@ -117,11 +97,32 @@ class UserAuthProvider(models.Model):
                 return obj, created
         except IntegrityError:
             raise
+    
+
+class UserAuthProvider(models.Model):
+    PROVIDERS = [
+        ('manual', 'Manual'),
+        ('google', 'Google'),
+        ('facebook', 'Facebook'),
+        ('github', 'GitHub'),
+    ]
+
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="auth_providers")
+    provider = models.CharField(max_length=20, choices=PROVIDERS)
+    uid = models.CharField(max_length=255, blank=True, null=True)  # Social provider user ID
+    extra_data = models.JSONField(blank=True, null=True)  # store profile data from social login
+
+    class Meta:
+        unique_together = ('user', 'provider')  # No duplicate provider for same user
+
+    def __str__(self):
+        return f"{self.user.email} - {self.provider}"
 
 
 
 class UserMessageContents(models.Model):
-    user = models.ForeignKey(UserAuthProvider, on_delete=models.CASCADE, related_name='user_messages', blank=True, null=True)
+    provider = models.ForeignKey(UserAuthProvider, on_delete=models.CASCADE, related_name='messages_from_provider', blank=True, null=True)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='messages', blank=True, null=True)
     purpose = models.CharField(max_length=255, null=True, blank=True)
     message = models.TextField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -130,5 +131,5 @@ class UserMessageContents(models.Model):
         ordering = ['timestamp']
 
     def __str__(self):
-        return self.purpose
+        return self.purpose or "No purpose"
 
