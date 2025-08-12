@@ -33,6 +33,8 @@ class CustomUserManager(BaseUserManager):
 
     def create_superuser(self, name=None, email=None, phone=None, password=None, **extra_fields):
         """Superuser creation — password required."""
+        extra_fields.setdefault('is_verified', True)
+        extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
 
@@ -61,6 +63,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     USERNAME_FIELD = 'email'
     EMAIL_FIELD = 'email'
+
+    # Note: REQUIRED_FIELDS is only used by the createsuperuser command.
     REQUIRED_FIELDS = ['name']
 
     class Meta:

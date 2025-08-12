@@ -69,7 +69,26 @@ class ManualSignupView(View):
                     user.add_provider(provider)
                     # TODO: Send OTP email
                     return JsonResponse({"success": "OTP sent to existing user"}, status=200)
-        
+                
+                # 5️⃣ Case: New user → Create user and send OTP
+                else:
+                    otp_code = f"{random.randint(100000, 999999)}"
+                    user = User.objects.create(
+                        email=email,
+                        name=name,
+                        phone=phone,
+                        is_verified=False,
+                        is_active=True,
+                        otp=otp_code,
+                        otp_created_at=timezone.now()
+                    )
+
+                    user.save()
+                    user.add_provider(provider)
+                    # TODO: Send OTP email
+
+                    return JsonResponse({"success": "User created and OTP sent"}, status=201)
+
         except IntegrityError as e:
             return JsonResponse({"error": f"Database error: {str(e)}"}, status=500)
         except Exception as e:
