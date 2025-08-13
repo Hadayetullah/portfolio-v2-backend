@@ -1,5 +1,9 @@
 import json
 import random
+
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
 from django.contrib.auth import get_user_model
 from django.views import View
 from django.http import JsonResponse
@@ -18,6 +22,7 @@ def _parse_json_or_post(request):
         return request.POST
     
 
+@method_decorator(csrf_exempt, name='dispatch')
 class ManualSignupView(View):
     def post(self, request):
         try:
@@ -56,7 +61,11 @@ class ManualSignupView(View):
                             message=message
                         )
 
-                        return JsonResponse({"success": "Message saved for existing user"}, status=200)
+                        return JsonResponse({
+                            "message": "Message saved for existing user",
+                            "verified": True,
+                            "active": True
+                            }, status=200)
                     
                     except IntegrityError:
                         return JsonResponse({"error": "Could not save message"}, status=500)
@@ -68,7 +77,12 @@ class ManualSignupView(View):
                     user.save(update_fields=['otp', 'otp_created_at'])
                     user.add_provider(provider)
                     # TODO: Send OTP email
-                    return JsonResponse({"success": "OTP sent to existing user"}, status=200)
+                    return JsonResponse({
+                        "message": "OTP sent to existing user",
+                        "email": email,
+                        "verified": False,
+                        "active": False
+                        }, status=200)
                 
                 # 5️⃣ Case: New user → Create user and send OTP
                 else:
@@ -78,7 +92,7 @@ class ManualSignupView(View):
                         name=name,
                         phone=phone,
                         is_verified=False,
-                        is_active=True,
+                        is_active=False,
                         otp=otp_code,
                         otp_created_at=timezone.now()
                     )
@@ -87,7 +101,12 @@ class ManualSignupView(View):
                     user.add_provider(provider)
                     # TODO: Send OTP email
 
-                    return JsonResponse({"success": "User created and OTP sent"}, status=201)
+                    return JsonResponse({
+                        "message": "User created and OTP sent",
+                        "email": email,
+                        "verified": False,
+                        "active": False
+                        }, status=201)
 
         except IntegrityError as e:
             return JsonResponse({"error": f"Database error: {str(e)}"}, status=500)
