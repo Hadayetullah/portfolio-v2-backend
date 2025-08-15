@@ -1,4 +1,3 @@
-import json
 import random
 
 from django.utils.decorators import method_decorator
@@ -11,16 +10,10 @@ from django.utils import timezone
 from django.db import transaction, IntegrityError
 
 from .models import UserAuthProvider, UserMessageContents
+from .utils import _parse_json_or_post, _send_otp_email
 
 # Create your views here.
-User = get_user_model()
-
-def _parse_json_or_post(request):
-    try:
-        return json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return request.POST
-    
+User = get_user_model()  
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ManualSignupView(View):
@@ -76,7 +69,10 @@ class ManualSignupView(View):
                     user.otp_created_at = timezone.now()
                     user.save(update_fields=['otp', 'otp_created_at'])
                     user.add_provider(provider)
-                    # TODO: Send OTP email
+
+                    # Send OTP email
+                    _send_otp_email(user)
+
                     return JsonResponse({
                         "message": "OTP sent to existing user",
                         "email": email,
@@ -99,7 +95,9 @@ class ManualSignupView(View):
 
                     user.save()
                     user.add_provider(provider)
-                    # TODO: Send OTP email
+
+                    # Send OTP email
+                    _send_otp_email(user)
 
                     return JsonResponse({
                         "message": "User created and OTP sent",
