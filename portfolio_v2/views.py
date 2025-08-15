@@ -55,7 +55,7 @@ class ManualSignupView(View):
                         )
 
                         return JsonResponse({
-                            "message": "Message saved for existing user",
+                            "message": "Thank you for your message. I will get back to you soon.",
                             "verified": True,
                             "active": True
                             }, status=200)
