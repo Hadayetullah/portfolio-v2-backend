@@ -1,38 +1,34 @@
 import random
-
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-
-from django.contrib.auth import get_user_model
-from django.views import View
-from django.http import JsonResponse
 from django.utils import timezone
 from django.db import transaction, IntegrityError
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
+from django.contrib.auth import get_user_model
 from .models import UserAuthProvider, UserMessageContents
-from .utils import _parse_json_or_post, _send_otp_email
+from .utils import _send_otp_email
 
-# Create your views here.
-User = get_user_model()  
+User = get_user_model()
 
-@method_decorator(csrf_exempt, name='dispatch')
-class ManualSignupView(View):
+
+class ManualSignupView(APIView):
+    authentication_classes = []  # no auth needed for signup
+    permission_classes = []      # open endpoint
+
     def post(self, request):
-        try:
-            data = _parse_json_or_post(request)
-        except Exception:
-            return JsonResponse({"error": "Invalid request body"}, status=400)
-        
+        data = request.data  
+
         # 1️⃣ Validate provider
         provider = data.get('provider')
         if provider != "manual":
-            return JsonResponse({"error": "Invalid provider"}, status=400)
-        
-        # 2️⃣ Required fields validation
+            return Response({"error": "Invalid provider"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2️⃣ Required fields
         email = data.get('email')
         if not email:
-            return JsonResponse({"error": "Email is required"}, status=400)
-            
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
         name = data.get('name')
         phone = data.get('phone')
         purpose = data.get('purpose')
@@ -40,10 +36,9 @@ class ManualSignupView(View):
 
         try:
             with transaction.atomic():
-
                 user = User.objects.filter(email=email).first()
 
-                # 3️⃣ Case: Existing verified user → Save message only
+                # 3️⃣ Existing verified user → Save message only
                 if user and user.is_verified and user.is_active:
                     try:
                         provider_obj, _ = user.add_provider(provider)
@@ -53,16 +48,15 @@ class ManualSignupView(View):
                             purpose=purpose,
                             message=message
                         )
-
-                        return JsonResponse({
+                        return Response({
                             "message": "Thank you for your message. I will get back to you soon.",
                             "verified": True,
                             "active": True
-                            }, status=200)
-                    
+                        }, status=status.HTTP_200_OK)
                     except IntegrityError:
-                        return JsonResponse({"error": "Could not save message"}, status=500)
-                    
+                        return Response({"error": "Could not save message"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                # 4️⃣ Existing but unverified/inactive user → resend OTP
                 elif user and (not user.is_verified or not user.is_active):
                     otp_code = f"{random.randint(100000, 999999)}"
                     user.otp = otp_code
@@ -70,17 +64,16 @@ class ManualSignupView(View):
                     user.save(update_fields=['otp', 'otp_created_at'])
                     user.add_provider(provider)
 
-                    # Send OTP email
                     _send_otp_email(user)
 
-                    return JsonResponse({
+                    return Response({
                         "message": "OTP sent to existing user",
                         "email": email,
                         "verified": False,
                         "active": False
-                        }, status=200)
-                
-                # 5️⃣ Case: New user → Create user and send OTP
+                    }, status=status.HTTP_200_OK)
+
+                # 5️⃣ New user → Create and send OTP
                 else:
                     otp_code = f"{random.randint(100000, 999999)}"
                     user = User.objects.create(
@@ -92,21 +85,18 @@ class ManualSignupView(View):
                         otp=otp_code,
                         otp_created_at=timezone.now()
                     )
-
-                    user.save()
                     user.add_provider(provider)
 
-                    # Send OTP email
                     _send_otp_email(user)
 
-                    return JsonResponse({
+                    return Response({
                         "message": "User created and OTP sent",
                         "email": email,
                         "verified": False,
                         "active": False
-                        }, status=201)
+                    }, status=status.HTTP_201_CREATED)
 
         except IntegrityError as e:
-            return JsonResponse({"error": f"Database error: {str(e)}"}, status=500)
+            return Response({"error": f"Database error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
+            return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

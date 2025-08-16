@@ -1,16 +1,5 @@
-import json
-
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
-
-
-# Parse data
-def _parse_json_or_post(request):
-    try:
-        return json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return request.POST
-
 
 # Send OTP email
 def _send_otp_email(user):
