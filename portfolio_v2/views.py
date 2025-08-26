@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from django.contrib.auth import get_user_model
-from .models import UserAuthProvider, UserMessageContents
+from .models import UserAuthProvider, UserMessageContents, OTPCode
 from .utils import _send_otp_email
 
 User = get_user_model()
@@ -59,12 +59,10 @@ class ManualSignupView(APIView):
                 # 4️⃣ Existing but unverified/inactive user → resend OTP
                 elif user and (not user.is_verified or not user.is_active):
                     otp_code = f"{random.randint(100000, 999999)}"
-                    user.otp = otp_code
-                    user.otp_created_at = timezone.now()
-                    user.save(update_fields=['otp', 'otp_created_at'])
+                    OTPCode.objects.create(user=user, otp_code=otp_code)
                     user.add_provider(provider)
 
-                    _send_otp_email(user)
+                    _send_otp_email(user, otp_code)
 
                     return Response({
                         "message": "OTP sent to existing user",
@@ -82,12 +80,11 @@ class ManualSignupView(APIView):
                         phone=phone,
                         is_verified=False,
                         is_active=False,
-                        otp=otp_code,
-                        otp_created_at=timezone.now()
                     )
                     user.add_provider(provider)
 
-                    _send_otp_email(user)
+                    OTPCode.objects.create(user=user, otp_code=otp_code)
+                    _send_otp_email(user, otp_code)
 
                     return Response({
                         "message": "User created and OTP sent",

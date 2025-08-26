@@ -50,10 +50,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=20, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
 
-    # OTP fields (for manual signup only)
-    otp = models.CharField(max_length=6, null=True, blank=True)
-    otp_created_at = models.DateTimeField(null=True, blank=True)
-
     # Status flags
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
@@ -69,12 +65,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         ordering = ['created']
-
-    def otp_is_valid(self):
-        """Check if OTP exists and is still valid."""
-        if self.otp and self.otp_created_at:
-            return timezone.now() < self.otp_created_at + timedelta(minutes=5)
-        return False
 
     def __str__(self):
         return self.email
@@ -102,6 +92,23 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         except IntegrityError:
             raise
     
+
+# OTP verification (for manual signup only)
+class OTPCode(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='otp_codes')
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def otp_is_valid(self):
+        """Check if OTP exists and is still valid."""
+        if self.otp_code and self.created_at:
+            return timezone.now() < self.created_at + timedelta(minutes=5)
+        return False
+
+    def __str__(self):
+        return f"OTP for {self.user.email}: {self.otp_code}"
+    
+
 
 class UserAuthProvider(models.Model):
     PROVIDERS = [
