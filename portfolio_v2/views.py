@@ -16,47 +16,6 @@ class ManualSignupView(APIView):
     authentication_classes = []  # no auth needed for signup
     permission_classes = []      # open endpoint
 
-    def get(self, request):
-        data = request.data
-        email = data.get("email")
-        otp_code = data.get("otp_code")
-
-        if not email or not otp_code:
-            return Response(
-                {"error": "Email and otp_code are required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            user = User.objects.filter(email=email).first()
-            if not user:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-            # Get the matching OTP for the user
-            otp_obj = OTPCode.objects.filter(user=user, otp_code=otp_code).order_by("-created_at").first()
-            print("otp_obj : ", otp_obj)
-            if not otp_obj:
-                return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Check if still valid
-            if not otp_obj.otp_is_valid():
-                return Response({"error": "OTP expired"}, status=status.HTTP_400_BAD_REQUEST)
-
-            # ✅ Mark user verified and active
-            user.is_verified = True
-            user.is_active = True
-            user.save(update_fields=["is_verified", "is_active"])
-
-            return Response({
-                "message": "OTP verified successfully",
-                "email": user.email,
-                "verified": True,
-                "active": True
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     def post(self, request):
         data = request.data  
 
@@ -138,3 +97,55 @@ class ManualSignupView(APIView):
             return Response({"error": f"Database error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class OTPVerificationView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        data = request.data
+        email = data.get("email")
+        otp_code = data.get("otp_code")
+
+        print("otp_code : ", otp_code)
+
+        if not email or not otp_code:
+            return Response(
+                {"error": "Email and otp_code are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.filter(email=email).first()
+            if not user:
+                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # Get the matching OTP for the user
+            otp_obj = OTPCode.objects.filter(user=user, otp_code=otp_code).order_by("-created_at").first()
+            print("otp_obj : ", otp_obj)
+            if not otp_obj:
+                return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if still valid
+            if not otp_obj.otp_is_valid():
+                return Response({"error": "OTP expired"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # ✅ Mark user verified and active
+            user.is_verified = True
+            user.is_active = True
+            user.save(update_fields=["is_verified", "is_active"])
+
+            # ❌ Delete all OTPs after success
+            OTPCode.objects.filter(user=user).delete()
+
+            return Response({
+                "message": "OTP verified successfully",
+                "email": user.email,
+                "verified": True,
+                "active": True
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
