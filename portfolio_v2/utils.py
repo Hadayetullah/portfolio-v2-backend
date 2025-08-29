@@ -1,3 +1,6 @@
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 
@@ -24,3 +27,10 @@ def _send_otp_email(user, otp_code):
     )
     msg.attach_alternative(html_content, "text/html")
     msg.send()
+
+
+# Generate access token
+def generate_access_token(user):
+    token = AccessToken.for_user(user)
+    return str(token)
+

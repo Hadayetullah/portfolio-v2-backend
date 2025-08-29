@@ -84,10 +84,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
                     defaults={'uid': uid, 'extra_data': extra_data}
                 )
                 # If provider existed but uid/extra_data changed, update it
-                if not created and uid and obj.uid != uid:
-                    obj.uid = uid
-                    obj.extra_data = extra_data
-                    obj.save(update_fields=['uid', 'extra_data'])
+                # if not created and uid and obj.uid != uid:
+                #     obj.uid = uid
+                #     obj.extra_data = extra_data
+                #     obj.save(update_fields=['uid', 'extra_data'])
+                # obj.save()
                 return obj, created
         except IntegrityError:
             raise
