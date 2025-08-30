@@ -2,7 +2,6 @@ from django.utils import timezone
 from datetime import timedelta
 
 from django.db import models
-from django.db import IntegrityError, transaction
 
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 
@@ -45,7 +44,17 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField(unique=True)
+    PROVIDERS = [
+        ('manual', 'Manual'),
+        ('google', 'Google'),
+        ('facebook', 'Facebook'),
+        ('github', 'GitHub'),
+    ]
+
+    email = models.EmailField()
+    provider = models.CharField(max_length=20, choices=PROVIDERS)
+    identifier = models.CharField(max_length=300, unique=True)  # email+provider
+    provider_details = models.JSONField(blank=True, null=True)
     name = models.CharField(max_length=255, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -57,42 +66,44 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
-    USERNAME_FIELD = 'email'
+    USERNAME_FIELD = 'identifier'
     EMAIL_FIELD = 'email'
 
     # Note: REQUIRED_FIELDS is only used by the createsuperuser command.
     REQUIRED_FIELDS = ['name']
 
     class Meta:
-        ordering = ['created']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['email', 'provider'], 
+                name='unique_email_provider'
+            )
+        ]
+        ordering = ['-created']
+
+    def save(self, *args, **kwargs):
+        # auto-generate identifier as "email|provider"
+        self.identifier = f"{self.email}|{self.provider}"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.email
-    
-    def has_provider(self, provider):
-        return self.auth_providers.filter(provider=provider).exists()
 
-    def add_provider(self, provider, uid=None, extra_data=None):
-        """
-        Create or update a UserAuthProvider row; returns (obj, created).
-        Uses get_or_create inside a transaction to avoid duplicates.
-        """
-        try:
-            with transaction.atomic():
-                obj, created = self.auth_providers.get_or_create(
-                    provider=provider,
-                    defaults={'uid': uid, 'extra_data': extra_data}
-                )
-                # If provider existed but uid/extra_data changed, update it
-                # if not created and uid and obj.uid != uid:
-                #     obj.uid = uid
-                #     obj.extra_data = extra_data
-                #     obj.save(update_fields=['uid', 'extra_data'])
-                # obj.save()
-                return obj, created
-        except IntegrityError:
-            raise
-    
+
+
+class UserMessageContents(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='messages', blank=True, null=True)
+    purpose = models.CharField(max_length=255, null=True, blank=True)
+    message = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp']
+
+    def __str__(self):
+        return self.purpose or "No purpose"
+
+
 
 # OTP verification (for manual signup only)
 class OTPCode(models.Model):
@@ -108,40 +119,4 @@ class OTPCode(models.Model):
 
     def __str__(self):
         return f"OTP for {self.user.email}: {self.otp_code}"
-    
-
-
-class UserAuthProvider(models.Model):
-    PROVIDERS = [
-        ('manual', 'Manual'),
-        ('google', 'Google'),
-        ('facebook', 'Facebook'),
-        ('github', 'GitHub'),
-    ]
-
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="auth_providers")
-    provider = models.CharField(max_length=20, choices=PROVIDERS)
-    uid = models.CharField(max_length=255, blank=True, null=True)  # Social provider user ID
-    extra_data = models.JSONField(blank=True, null=True)  # store profile data from social login
-
-    class Meta:
-        unique_together = ('user', 'provider')  # No duplicate provider for same user
-
-    def __str__(self):
-        return f"{self.user.email} - {self.provider}"
-
-
-
-class UserMessageContents(models.Model):
-    provider = models.ForeignKey(UserAuthProvider, on_delete=models.CASCADE, related_name='messages_from_provider', blank=True, null=True)
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='messages', blank=True, null=True)
-    purpose = models.CharField(max_length=255, null=True, blank=True)
-    message = models.TextField(null=True, blank=True)
-    timestamp = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['timestamp']
-
-    def __str__(self):
-        return self.purpose or "No purpose"
 

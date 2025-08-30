@@ -9,17 +9,15 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 
 from django.contrib.auth import get_user_model
-from .models import UserAuthProvider, UserMessageContents, OTPCode
+from .models import UserMessageContents, OTPCode
 from .utils import _send_otp_email
 
 User = get_user_model()
 
 
-def _save_info(user, provider, purpose, message):
+def _save_info(user, purpose, message):
     try:
-        provider_obj, _ = user.add_provider(provider)
         UserMessageContents.objects.create(
-            provider=provider_obj,
             user=user,
             purpose=purpose,
             message=message
