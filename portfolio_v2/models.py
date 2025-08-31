@@ -12,26 +12,27 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('A valid email address is required')
 
         email = self.normalize_email(email)
-        user = self.model(name=name, email=email, phone=phone, **extra_fields)
 
-        if password:
-            user.set_password(password)
-        else:
-            user.set_unusable_password()  # Safely disable password login
+        user = self.model(
+            name=name,
+            email=email,
+            phone=phone,
+            **extra_fields
+        )
+
+        user.set_password(password)
 
         user.save(using=self._db)
         return user
 
-    def create_user(self, name=None, email=None, phone=None, **extra_fields):
-        """Normal user creation — no password unless explicitly given."""
+    def create_user(self, name=None, email=None, phone=None, password=None, **extra_fields):
+        extra_fields.setdefault('is_verified', True)
+        extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('is_staff', False)
         extra_fields.setdefault('is_superuser', False)
-
-        # Passwordless by default
-        return self._create_user(name, email, phone, password=None, **extra_fields)
+        return self._create_user(name, email, phone, password, **extra_fields)
 
     def create_superuser(self, name=None, email=None, phone=None, password=None, **extra_fields):
-        """Superuser creation — password required."""
         extra_fields.setdefault('is_verified', True)
         extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('is_staff', True)
@@ -40,21 +41,11 @@ class CustomUserManager(BaseUserManager):
         if password is None:
             raise ValueError('Superusers must have a password.')
 
-        return self._create_user(name, email, phone, password=password, **extra_fields)
+        return self._create_user(name, email, phone, password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    PROVIDERS = [
-        ('manual', 'Manual'),
-        ('google', 'Google'),
-        ('facebook', 'Facebook'),
-        ('github', 'GitHub'),
-    ]
-
-    email = models.EmailField()
-    provider = models.CharField(max_length=20, choices=PROVIDERS)
-    identifier = models.CharField(max_length=300, unique=True)  # email+provider
-    provider_details = models.JSONField(blank=True, null=True)
+    email = models.EmailField(unique=True)
     name = models.CharField(max_length=255, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -66,28 +57,40 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
-    USERNAME_FIELD = 'identifier'
+    USERNAME_FIELD = 'email'
     EMAIL_FIELD = 'email'
-
-    # Note: REQUIRED_FIELDS is only used by the createsuperuser command.
     REQUIRED_FIELDS = ['name']
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['email', 'provider'], 
-                name='unique_email_provider'
-            )
-        ]
         ordering = ['-created']
-
-    def save(self, *args, **kwargs):
-        # auto-generate identifier as "email|provider"
-        self.identifier = f"{self.email}|{self.provider}"
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.email
+
+
+
+class AuthProvider(models.Model):
+    PROVIDERS = [
+        ('manual', 'Manual'),
+        ('google', 'Google'),
+        ('facebook', 'Facebook'),
+        ('github', 'GitHub'),
+    ]
+
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='auth_providers')
+    provider = models.CharField(max_length=20, choices=PROVIDERS)
+    provider_details = models.JSONField(blank=True, null=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'provider'], name='unique_user_provider')
+        ]
+
+        ordering = ['-created']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.provider}"
 
 
 
