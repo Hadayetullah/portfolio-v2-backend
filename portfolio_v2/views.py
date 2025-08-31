@@ -138,3 +138,43 @@ class OTPVerificationView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+
+
+class ProcessUserMessageView(APIView):
+    authentication_classes = [JWTAuthentication]  # DRF will decode the Bearer token
+    permission_classes = [IsAuthenticated]      # Ensures token is required
+
+    def post(self, request):
+        data = request.data  
+
+        # 1️⃣ Validate provider
+        provider = data.get('provider')
+        if not provider:
+            return Response({"error": "Invalid provider"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2️⃣ Required fields
+        email = data.get('email')
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        name = data.get('name')
+        phone = data.get('phone')
+        purpose = data.get('purpose')
+        message = data.get('message')
+
+        try:
+            with transaction.atomic():
+                user = User.objects.filter(email=email).first()
+
+                # 3️⃣ Existing verified user → Save message only
+                if user and user.is_verified and user.is_active:
+                    user.name = name or user.name
+                    user.phone = phone or user.phone
+                    user.save(update_fields=["name", "phone"])
+
+                    _save_info(user, provider, purpose, message)
+
+        except IntegrityError as e:
+            return Response({"error": f"Database error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
