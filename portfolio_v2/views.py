@@ -1,6 +1,8 @@
 import random
 from django.utils import timezone
 from django.db import transaction, IntegrityError
+from django.core.exceptions import ObjectDoesNotExist
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -15,7 +17,7 @@ from .utils import _send_otp_email
 User = get_user_model()
 
 
-def _save_info(user, purpose, message):
+def _save_message_contents(user, purpose, message):
     try:
         UserMessageContents.objects.create(
             user=user,
@@ -57,19 +59,24 @@ class ManualSignupView(APIView):
                 # Send otp
                 user = User.objects.filter(email=email).first()
                 if user:
+                    user.save(update_fields=['name', 'phone'])
                     OTPCode.objects.create(user=user, otp_code=otp_code)
                     _send_otp_email(user, otp_code)
 
                 # New user → Create and send OTP
                 else:
-                    user = User.objects.create(
+                    user, created = User.objects.create(
                         email=email,
-                        name=name,
-                        phone=phone,
-                        is_verified=False,
-                        is_active=False,
+                        defaults={
+                            "name": name,
+                            "phone": phone,
+                            "is_verified": True,
+                            "is_active": True,
+                        }
                     )
-                    user.add_provider(provider)
+
+                    if created:
+                        user.auth_providers.create(provider=provider, provider_details={})
 
                     OTPCode.objects.create(user=user, otp_code=otp_code)
                     _send_otp_email(user, otp_code)
@@ -96,6 +103,9 @@ class OTPVerificationView(APIView):
         data = request.data
         email = data.get("email")
         otp_code = data.get("otp_code")
+
+        purpose = data.get('purpose')
+        message = data.get('message')
 
         print("otp_code : ", otp_code)
 
@@ -127,13 +137,15 @@ class OTPVerificationView(APIView):
 
             # ❌ Delete all OTPs after success
             OTPCode.objects.filter(user=user).delete()
+            
+            _save_message_contents(user, purpose, message)
 
-            return Response({
-                "message": "OTP verified successfully",
-                "email": user.email,
-                "verified": True,
-                "active": True
-            }, status=status.HTTP_200_OK)
+            # return Response({
+            #     "message": "OTP verified successfully",
+            #     "email": user.email,
+            #     "verified": True,
+            #     "active": True
+            # }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -159,6 +171,7 @@ class ProcessUserMessageView(APIView):
 
         name = data.get('name')
         phone = data.get('phone')
+        provider_details = data.get('provider_details')
         purpose = data.get('purpose')
         message = data.get('message')
 
@@ -167,12 +180,19 @@ class ProcessUserMessageView(APIView):
                 user = User.objects.filter(email=email).first()
 
                 # 3️⃣ Existing verified user → Save message only
-                if user and user.is_verified and user.is_active:
+                if user:
                     user.name = name or user.name
                     user.phone = phone or user.phone
-                    user.save(update_fields=["name", "phone"])
+                    user.is_verified = True
+                    user.is_active = True
+                    user.save()
 
-                    _save_info(user, provider, purpose, message)
+                    user.auth_providers.get_or_create(
+                        provider=provider,
+                        defaults={"provider_details": provider_details}
+                    )
+
+                    _save_message_contents(user, purpose, message)
 
         except IntegrityError as e:
             return Response({"error": f"Database error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
