@@ -63,7 +63,7 @@ AUTH_USER_MODEL = 'portfolio_v2.CustomUser'
 
 # Variable settings of SIMPLE_JWT
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=14),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
 
     "ALGORITHM": "HS256",

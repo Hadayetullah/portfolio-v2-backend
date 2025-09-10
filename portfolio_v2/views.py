@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from django.contrib.auth import get_user_model
 from .models import UserMessageContents, OTPCode
-from .utils import _send_otp_email
+from .utils import _send_otp_email, generate_access_token
 
 User = get_user_model()
 
@@ -129,10 +129,13 @@ class OTPVerificationView(APIView):
                         purpose=purpose,
                         message=message
                     )
+
+                    access_token = generate_access_token(user)
                     return Response({
                         "message": "Thank you for your message. I will get back to you soon.",
                         "verified": True,
-                        "active": True
+                        "active": True,
+                        "token": access_token
                     }, status=status.HTTP_200_OK)
                 except IntegrityError:
                     return Response({"error": "Could not save message"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -143,11 +146,8 @@ class OTPVerificationView(APIView):
 
 
 class ProcessUserMessageView(APIView):
-    # authentication_classes = [JWTAuthentication]  # DRF will decode the Bearer token
-    # permission_classes = [IsAuthenticated]      # Ensures token is required
-
-    authentication_classes = []  # DRF will decode the Bearer token
-    permission_classes = []      # Ensures token is required
+    authentication_classes = [JWTAuthentication]  # DRF will decode the Bearer token
+    permission_classes = [IsAuthenticated]      # Ensures token is required
 
     def post(self, request):
         data = request.data  
@@ -192,12 +192,14 @@ class ProcessUserMessageView(APIView):
                             message=message
                         )
 
+                        access_token = generate_access_token(user)
                         return Response({
                             "message": "Thank you for your message. I will get back to you soon.",
                             "verified": True,
-                            "active": True
+                            "active": True,
+                            "token": access_token
                         }, status=status.HTTP_200_OK)
-                    
+                        
                     except IntegrityError:
                         return Response({"error": "Could not save message"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
