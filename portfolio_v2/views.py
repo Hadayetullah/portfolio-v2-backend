@@ -151,63 +151,154 @@ class OTPVerificationView(APIView):
 
 
 class SocialAuthView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
     def post(self, request):
         provider = request.data.get("provider")
         token = request.data.get("access_token")
 
         if not provider or not token:
-            return Response({"error": "Provider and token are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Provider and access_token are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        user_info = None
+        email, name = None, None
 
         try:
             if provider == "google":
-                # ✅ Google validation (ID or access token)
-                user_info = id_token.verify_oauth2_token(
-                    token, google_requests.Request(), "<GOOGLE_CLIENT_ID>"
+                # ✅ Google UserInfo endpoint
+                resp = requests.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {token}"},
                 )
-                email = user_info["email"]
-                name = user_info.get("name")
+                data = resp.json()
+                if "error" in data or "email" not in data:
+                    return Response(
+                        {"error": "Invalid Google token"},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+                email = data.get("email")
+                name = data.get("name")
 
             elif provider == "facebook":
-                # ✅ Facebook validation
+                # ✅ Facebook Graph API
                 resp = requests.get(
                     f"https://graph.facebook.com/me?fields=id,name,email&access_token={token}"
                 )
                 data = resp.json()
                 if "error" in data:
-                    return Response({"error": "Invalid Facebook token"}, status=status.HTTP_401_UNAUTHORIZED)
+                    return Response(
+                        {"error": "Invalid Facebook token"},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
                 email = data.get("email")
                 name = data.get("name")
 
             elif provider == "github":
-                # ✅ GitHub validation
+                # ✅ GitHub API
                 resp = requests.get(
                     "https://api.github.com/user",
-                    headers={"Authorization": f"Bearer {token}"}
+                    headers={"Authorization": f"Bearer {token}"},
                 )
                 data = resp.json()
                 if "id" not in data:
-                    return Response({"error": "Invalid GitHub token"}, status=status.HTTP_401_UNAUTHORIZED)
-                email = data.get("email")
+                    return Response(
+                        {"error": "Invalid GitHub token"},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+                email = data.get("email")  # sometimes null if user hides email
                 name = data.get("name") or data.get("login")
 
             else:
-                return Response({"error": "Unsupported provider"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Unsupported provider"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            # ✅ Get or create user
-            user, _ = User.objects.get_or_create(email=email, defaults={"username": email, "first_name": name})
-
-            # ✅ Issue backend JWT
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-                "user": {"email": email, "name": name}
-            })
+            return Response({"user": {"email": email, "name": name}}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+
+
+# class SocialAuthView(APIView):
+#     authentication_classes = []
+#     permission_classes = []
+
+#     def post(self, request):
+#         provider = request.data.get("provider")
+#         token = request.data.get("access_token")
+
+#         if not provider or not token:
+#             return Response({"error": "Provider and token are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+#         user_info = None
+
+#         try:
+#             if provider == "google":
+#                 print("Provider : ", provider)
+#                 print("token : ", token)
+#                 # ✅ Google validation (ID or access token)
+#                 resp = requests.get(
+#                     "https://www.googleapis.com/oauth2/v3/userinfo",
+#                     headers={"Authorization": f"Bearer {token}"}
+#                 )
+#                 data = resp.json()
+#                 if "email" not in data:
+#                     return Response({"error": "Invalid Google token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+#                 print("Google user info: ", data)
+#                 email = data.get("email")
+#                 name = data.get("name")
+
+#             elif provider == "facebook":
+#                 # ✅ Facebook validation
+#                 resp = requests.get(
+#                     f"https://graph.facebook.com/me?fields=id,name,email&access_token={token}"
+#                 )
+#                 data = resp.json()
+#                 if "error" in data:
+#                     return Response({"error": "Invalid Facebook token"}, status=status.HTTP_401_UNAUTHORIZED)
+#                 email = data.get("email")
+#                 name = data.get("name")
+
+#             elif provider == "github":
+#                 # ✅ GitHub validation
+#                 resp = requests.get(
+#                     "https://api.github.com/user",
+#                     headers={"Authorization": f"Bearer {token}"}
+#                 )
+#                 data = resp.json()
+#                 if "id" not in data:
+#                     return Response({"error": "Invalid GitHub token"}, status=status.HTTP_401_UNAUTHORIZED)
+#                 email = data.get("email")
+#                 name = data.get("name") or data.get("login")
+
+#             else:
+#                 return Response({"error": "Unsupported provider"}, status=status.HTTP_400_BAD_REQUEST)
+
+#             # ✅ Get or create user
+#             user, _ = User.objects.get_or_create(email=email, defaults={"username": email, "first_name": name})
+
+#             # ✅ Issue backend JWT
+#             # refresh = RefreshToken.for_user(user)
+#             # return Response({
+#             #     "access": str(refresh.access_token),
+#             #     "refresh": str(refresh),
+#             #     "user": {"email": email, "name": name}
+#             # })
+        
+#             return Response({
+#                 "user": {"email": email, "name": name}
+#             })
+
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class ProcessUserMessageView(APIView):
