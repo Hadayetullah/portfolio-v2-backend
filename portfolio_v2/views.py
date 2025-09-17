@@ -59,8 +59,8 @@ class ManualSignupView(APIView):
                         email=email,
                         name=name,
                         phone=phone,
-                        is_verified=True,
-                        is_active=True
+                        is_verified=False,
+                        is_active=False
                     )
 
                     user.auth_providers.create(provider=provider, provider_details=None)
@@ -209,7 +209,6 @@ class SocialAuthView(APIView):
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
                 email = data.get("email")  # sometimes null if user hides email
-                name = data.get("name") or data.get("login")
 
             else:
                 return Response(
@@ -217,7 +216,27 @@ class SocialAuthView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            return Response({"user": {"email": email, "name": name}}, status=status.HTTP_200_OK)
+            
+            try:
+                user, created = User.objects.get_or_create(
+                    email=email,
+                    is_verified=True,
+                    is_active=True
+                )
+
+                if created:
+                    user.auth_providers.create(provider=provider, provider_details=None)
+
+            except IntegrityError:
+                return Response({"error": f"Database error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            access_token = generate_access_token(user)
+            return Response({
+                "message": "Verification successful.",
+                "verified": True,
+                "active": True,
+                "token": access_token
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
@@ -277,7 +296,7 @@ class SocialAuthView(APIView):
 #                 if "id" not in data:
 #                     return Response({"error": "Invalid GitHub token"}, status=status.HTTP_401_UNAUTHORIZED)
 #                 email = data.get("email")
-#                 name = data.get("name") or data.get("login")
+
 
 #             else:
 #                 return Response({"error": "Unsupported provider"}, status=status.HTTP_400_BAD_REQUEST)
