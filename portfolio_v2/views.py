@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from django.contrib.auth import get_user_model
 from .models import UserMessageContents, OTPCode
-from .utils import _send_otp_email, generate_access_token
+from .utils import _send_otp_email, _get_email_client, generate_access_token
 
 
 User = get_user_model()
@@ -45,6 +45,7 @@ class ManualSignupView(APIView):
                 user = User.objects.filter(email=email).first()
                 if user:
                     user.save(update_fields=['name', 'phone'])
+                    user.auth_providers.get_or_create(provider=provider, defaults={"provider_details": None})
                     OTPCode.objects.create(user=user, otp_code=otp_code)
                     _send_otp_email(user, otp_code)
 
@@ -86,6 +87,7 @@ class OTPVerificationView(APIView):
         email = data.get("email")
         otp_code = data.get("otp_code")
 
+        name = data.get('name')
         purpose = data.get('purpose')
         message = data.get('message')
 
@@ -129,6 +131,8 @@ class OTPVerificationView(APIView):
                         purpose=purpose,
                         message=message
                     )
+
+                    _get_email_client(email, name, purpose, message)
 
                     access_token = generate_access_token(user)
                     return Response({
@@ -302,6 +306,8 @@ class ProcessUserMessageView(APIView):
                             purpose=purpose,
                             message=message
                         )
+
+                        _get_email_client(email, name, purpose, message)
 
                         return Response({
                             "message": "Thank you for your message. I will get back to you soon.",
